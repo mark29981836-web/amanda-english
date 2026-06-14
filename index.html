@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f0e6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Amanda English Studio</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.svg">
+  <link rel="apple-touch-icon" href="icon-192.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#learn" aria-label="回到首頁">
+      <span class="brand-mark">A</span>
+      <span><strong>Amanda English</strong><small>每天 10 分鐘，從熟悉的生活開始</small></span>
+    </a>
+    <button class="icon-button" id="installButton" hidden>加入主畫面</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img id="heroImage" src="icon-512.svg" alt="髮型設計師在工作空檔使用平板學英文">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <p class="eyebrow">Amanda Hair studio</p>
+        <h1>英文不用背，<br>從每天遇到的情境開始。</h1>
+        <p>看圖片、聽發音、說一句真正用得到的話。</p>
+        <button class="primary-button" data-go="today">開始今天的 10 分鐘</button>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="學習進度">
+      <div><strong id="learnedCount">0</strong><span>已熟悉</span></div>
+      <div><strong id="streakCount">1</strong><span>連續天數</span></div>
+      <div><strong id="totalCount">60</strong><span>生活情境</span></div>
+    </section>
+
+    <section class="view active" id="learn">
+      <div class="section-heading">
+        <div><p class="eyebrow">情境圖卡</p><h2>今天想學什麼？</h2></div>
+      </div>
+      <label class="search">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="搜尋 Volume、早餐、頭皮…" autocomplete="off">
+      </label>
+      <div class="filters" id="filters" role="group" aria-label="分類">
+        <button class="active" data-filter="all">全部</button>
+        <button data-filter="hair">髮廊英文</button>
+        <button data-filter="life">生活英文</button>
+        <button data-filter="customer">客戶對話</button>
+      </div>
+      <div class="card-grid" id="cardGrid"></div>
+      <p class="empty-state" id="emptyState" hidden>找不到這個情境，換個關鍵字試試看。</p>
+    </section>
+
+    <section class="view" id="today">
+      <div class="section-heading">
+        <div><p class="eyebrow" id="todayDate"></p><h2>今天的 10 分鐘</h2></div>
+        <button class="text-button" id="refreshDaily">換一組</button>
+      </div>
+      <div class="daily-intro">
+        <span>5</span>
+        <p><strong>個情境，5 句英文</strong><br>不用全部記住，先聽懂、敢開口就好。</p>
+      </div>
+      <div class="card-grid" id="dailyGrid"></div>
+    </section>
+
+    <section class="view" id="quiz">
+      <div class="section-heading">
+        <div><p class="eyebrow">今日 5 個拼字練習</p><h2>先靠記憶，再用聲音和字母線索</h2></div>
+      </div>
+      <div class="quiz-panel" id="quizPanel">
+      </div>
+    </section>
+
+    <section class="view" id="shadow">
+      <div class="section-heading">
+        <div><p class="eyebrow">句子跟讀</p><h2>聽一句，停 3 秒，換你說</h2></div>
+      </div>
+      <div class="shadow-panel">
+        <img id="shadowImage" alt="">
+        <span class="category-pill" id="shadowCategory"></span>
+        <h2 id="shadowSentence"></h2>
+        <p id="shadowTranslation"></p>
+        <div class="countdown" id="countdown">準備好了就按播放</div>
+        <button class="play-large" id="shadowPlay"><span>▶</span>播放並跟讀</button>
+        <div class="shadow-actions">
+          <button class="text-button" id="previousShadow">上一句</button>
+          <button class="text-button" id="nextShadow">下一句</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="主要功能">
+    <button class="active" data-view="learn"><span>▦</span>圖卡</button>
+    <button data-view="today"><span>☀</span>今日</button>
+    <button data-view="quiz"><span>◇</span>測驗</button>
+    <button data-view="shadow"><span>◉</span>跟讀</button>
+  </nav>
+
+  <template id="cardTemplate">
+    <article class="word-card">
+      <div class="image-wrap">
+        <img loading="lazy" alt="">
+        <span class="category-pill"></span>
+        <button class="learn-button" aria-label="標記為已熟悉">✓</button>
+      </div>
+      <div class="card-body">
+        <div class="word-row"><div><h3></h3><p class="chinese"></p></div><button class="audio-button word-audio" aria-label="播放單字">▶</button></div>
+        <div class="sentence">
+          <p class="english-sentence"></p>
+          <p class="translation"></p>
+          <button class="sentence-audio"><span>▶</span>聽完整句子</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="chunk-1.js"></script>
+  <script src="chunk-2.js"></script>
+  <script src="chunk-3.js"></script>
+  <script src="chunk-4.js"></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

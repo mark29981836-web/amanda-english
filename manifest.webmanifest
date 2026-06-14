@@ -1,0 +1,13 @@
+{
+  "name": "Amanda English Studio",
+  "short_name": "Amanda English",
+  "description": "給圖像型、情境型學習者的每日 10 分鐘英文練習",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f0e6",
+  "theme_color": "#7f9180",
+  "icons": [
+    {"src":"icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
+    {"src":"icon-512.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
