@@ -88,6 +88,16 @@
         <p id="shadowTranslation"></p>
         <div class="countdown" id="countdown">準備好了就按播放</div>
         <button class="play-large" id="shadowPlay"><span>▶</span>播放並跟讀</button>
+        <button class="record-stop" id="shadowStop" hidden><span>■</span>我說完了</button>
+        <section class="speech-result" id="speechResult" hidden aria-live="polite">
+          <p class="eyebrow">這次的跟讀結果</p>
+          <div class="speech-score" id="speechScore"></div>
+          <p class="recognized-label">手機聽到：</p>
+          <p class="recognized-text" id="recognizedText"></p>
+          <div class="word-feedback" id="wordFeedback"></div>
+          <audio id="recordingPlayback" controls hidden></audio>
+          <p class="privacy-note">錄音只暫存在這個頁面，離開或重新整理後就會消失。</p>
+        </section>
         <div class="shadow-actions">
           <button class="text-button" id="previousShadow">上一句</button>
           <button class="text-button" id="nextShadow">下一句</button>

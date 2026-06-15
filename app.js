@@ -12,6 +12,14 @@ const state = {
   quizResults: [],
   shadowIndex: 0,
   audio: null,
+  micStream: null,
+  recorder: null,
+  recordingChunks: [],
+  recordingUrl: null,
+  recognition: null,
+  recognitionText: "",
+  recordingTimer: null,
+  shadowSession: 0,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -67,6 +75,7 @@ function bindEvents() {
     showToast("今日圖卡與測驗已同步換成新的一組");
   });
   $("#shadowPlay").addEventListener("click", playShadow);
+  $("#shadowStop").addEventListener("click", stopShadowRecording);
   $("#previousShadow").addEventListener("click", () => changeShadow(-1));
   $("#nextShadow").addEventListener("click", () => changeShadow(1));
 }
@@ -425,6 +434,7 @@ function nextQuiz() {
 }
 
 function renderShadow() {
+  resetShadowRecording();
   const item = state.words[state.shadowIndex];
   $("#shadowImage").src = assetUrl(item.image);
   $("#shadowImage").alt = item.chinese;
@@ -439,9 +449,29 @@ function changeShadow(direction) {
   renderShadow();
 }
 
-function playShadow() {
+async function playShadow() {
   const item = state.words[state.shadowIndex];
   const button = $("#shadowPlay");
+  resetShadowRecording();
+
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    $("#countdown").textContent = "這個瀏覽器不支援錄音，仍可使用原本的跟讀模式";
+    playShadowWithoutRecording(item, button);
+    return;
+  }
+
+  button.disabled = true;
+  $("#countdown").textContent = "請允許麥克風，錄音只會暫存在這個頁面";
+  try {
+    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (error) {
+    button.disabled = false;
+    $("#countdown").textContent = "沒有取得麥克風權限，仍可聽示範跟讀";
+    showToast("需要允許麥克風，才能錄下你的發音");
+    playShadowWithoutRecording(item, button);
+    return;
+  }
+
   $("#countdown").textContent = "先仔細聽…";
   playAudio(item.sentenceAudio, button, () => {
     let count = 3;
@@ -451,10 +481,233 @@ function playShadow() {
       if (count > 0) $("#countdown").textContent = `${count}`;
       else {
         clearInterval(timer);
-        $("#countdown").textContent = "換你說 🎙";
+        startShadowRecording(item);
+      }
+    }, 1000);
+  });
+}
+
+function playShadowWithoutRecording(item, button) {
+  playAudio(item.sentenceAudio, button, () => {
+    let count = 3;
+    $("#countdown").textContent = `${count}`;
+    const timer = setInterval(() => {
+      count -= 1;
+      if (count > 0) $("#countdown").textContent = `${count}`;
+      else {
+        clearInterval(timer);
+        $("#countdown").textContent = "換你說";
         setTimeout(() => { $("#countdown").textContent = "很好，再說一次也可以"; }, 3500);
       }
     }, 1000);
+  });
+}
+
+function startShadowRecording(item) {
+  const session = state.shadowSession;
+  state.recordingChunks = [];
+  state.recognitionText = "";
+  const options = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"]
+    .find((type) => MediaRecorder.isTypeSupported(type));
+  state.recorder = options
+    ? new MediaRecorder(state.micStream, { mimeType: options })
+    : new MediaRecorder(state.micStream);
+  state.recorder.addEventListener("dataavailable", (event) => {
+    if (event.data.size) state.recordingChunks.push(event.data);
+  });
+  state.recorder.addEventListener("stop", () => {
+    setTimeout(() => finishShadowRecording(item, session), 650);
+  }, { once: true });
+
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (Recognition) {
+    state.recognition = new Recognition();
+    state.recognition.lang = "en-US";
+    state.recognition.continuous = false;
+    state.recognition.interimResults = false;
+    state.recognition.maxAlternatives = 5;
+    state.recognition.addEventListener("result", (event) => {
+      const alternatives = [...event.results[0]].map((result) => result.transcript);
+      state.recognitionText = pickClosestTranscript(item.sentence, alternatives);
+    });
+    state.recognition.addEventListener("error", () => {
+      state.recognitionText = "";
+    });
+    try {
+      state.recognition.start();
+    } catch (error) {
+      state.recognition = null;
+    }
+  }
+
+  state.recorder.start();
+  $("#countdown").textContent = "正在錄音，請說出英文句子";
+  $("#shadowPlay").hidden = true;
+  $("#shadowStop").hidden = false;
+  state.recordingTimer = setTimeout(stopShadowRecording, 10000);
+}
+
+function stopShadowRecording() {
+  clearTimeout(state.recordingTimer);
+  state.recordingTimer = null;
+  if (state.recognition) {
+    try {
+      state.recognition.stop();
+    } catch (error) {
+      // Recognition may already have stopped after receiving a result.
+    }
+  }
+  if (state.recorder?.state === "recording") {
+    $("#countdown").textContent = "正在整理你的跟讀結果…";
+    state.recorder.stop();
+  }
+}
+
+function finishShadowRecording(item, session) {
+  if (session !== state.shadowSession) return;
+  const blob = new Blob(state.recordingChunks, {
+    type: state.recorder?.mimeType || "audio/mp4",
+  });
+  if (state.recordingUrl) URL.revokeObjectURL(state.recordingUrl);
+  state.recordingUrl = URL.createObjectURL(blob);
+  const playback = $("#recordingPlayback");
+  playback.src = state.recordingUrl;
+  playback.hidden = false;
+  stopMicrophone();
+
+  $("#shadowPlay").hidden = false;
+  $("#shadowPlay").disabled = false;
+  $("#shadowStop").hidden = true;
+  $("#speechResult").hidden = false;
+
+  if (state.recognitionText) {
+    renderSpeechComparison(item.sentence, state.recognitionText);
+    $("#countdown").textContent = "完成，可以重聽自己的發音";
+  } else {
+    $("#speechScore").textContent = "錄音完成";
+    $("#recognizedText").textContent = "這次手機沒有成功辨識文字，請重聽錄音後再試一次。";
+    $("#wordFeedback").innerHTML = "";
+    $("#countdown").textContent = "錄音已保留在下方，可以重聽";
+  }
+}
+
+function resetShadowRecording() {
+  state.shadowSession += 1;
+  clearTimeout(state.recordingTimer);
+  state.recordingTimer = null;
+  if (state.recorder?.state === "recording") state.recorder.stop();
+  if (state.recognition) {
+    try {
+      state.recognition.abort();
+    } catch (error) {
+      // Recognition may already be inactive.
+    }
+  }
+  stopMicrophone();
+  if (state.recordingUrl) URL.revokeObjectURL(state.recordingUrl);
+  state.recordingUrl = null;
+  state.recorder = null;
+  state.recognition = null;
+  state.recordingChunks = [];
+  state.recognitionText = "";
+  $("#shadowPlay").hidden = false;
+  $("#shadowPlay").disabled = false;
+  $("#shadowStop").hidden = true;
+  $("#speechResult").hidden = true;
+  $("#recordingPlayback").removeAttribute("src");
+}
+
+function stopMicrophone() {
+  state.micStream?.getTracks().forEach((track) => track.stop());
+  state.micStream = null;
+}
+
+function speechWords(text) {
+  return text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || [];
+}
+
+function editDistance(left, right) {
+  const rows = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) rows[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) rows[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      rows[i][j] = Math.min(
+        rows[i - 1][j] + 1,
+        rows[i][j - 1] + 1,
+        rows[i - 1][j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+    }
+  }
+  return rows[left.length][right.length];
+}
+
+function pickClosestTranscript(expected, alternatives) {
+  const target = speechWords(expected);
+  return alternatives.reduce((best, transcript) => {
+    const distance = editDistance(target, speechWords(transcript));
+    return !best || distance < best.distance ? { transcript, distance } : best;
+  }, null)?.transcript || "";
+}
+
+function alignSpeech(expected, heard) {
+  const target = speechWords(expected);
+  const actual = speechWords(heard);
+  const rows = Array.from({ length: target.length + 1 }, () => Array(actual.length + 1).fill(0));
+  for (let i = 0; i <= target.length; i += 1) rows[i][0] = i;
+  for (let j = 0; j <= actual.length; j += 1) rows[0][j] = j;
+  for (let i = 1; i <= target.length; i += 1) {
+    for (let j = 1; j <= actual.length; j += 1) {
+      rows[i][j] = Math.min(
+        rows[i - 1][j] + 1,
+        rows[i][j - 1] + 1,
+        rows[i - 1][j - 1] + (target[i - 1] === actual[j - 1] ? 0 : 1),
+      );
+    }
+  }
+
+  const aligned = [];
+  let i = target.length;
+  let j = actual.length;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && target[i - 1] === actual[j - 1]) {
+      aligned.unshift({ word: target[i - 1], status: "correct" });
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && j > 0 && rows[i][j] === rows[i - 1][j - 1] + 1) {
+      aligned.unshift({ word: target[i - 1], heard: actual[j - 1], status: "different" });
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && rows[i][j] === rows[i - 1][j] + 1) {
+      aligned.unshift({ word: target[i - 1], status: "missing" });
+      i -= 1;
+    } else {
+      aligned.unshift({ word: actual[j - 1], status: "extra" });
+      j -= 1;
+    }
+  }
+  return aligned;
+}
+
+function renderSpeechComparison(expected, heard) {
+  const aligned = alignSpeech(expected, heard);
+  const targetCount = speechWords(expected).length || 1;
+  const correctCount = aligned.filter((word) => word.status === "correct").length;
+  const score = Math.round((correctCount / targetCount) * 100);
+  $("#speechScore").textContent = score >= 90
+    ? `${score}%・句子很清楚`
+    : score >= 65
+      ? `${score}%・再練一次會更穩`
+      : `${score}%・先慢慢說清楚每個字`;
+  $("#recognizedText").textContent = heard;
+  const feedback = $("#wordFeedback");
+  feedback.innerHTML = "";
+  aligned.forEach((entry) => {
+    const word = document.createElement("span");
+    word.className = `speech-word ${entry.status}`;
+    word.textContent = entry.word;
+    if (entry.status === "different") word.title = `手機聽成 ${entry.heard}`;
+    feedback.appendChild(word);
   });
 }
 
