@@ -26,6 +26,8 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const labels = { hair: "髮廊英文", life: "生活英文" };
 const assetUrl = (path) => window.AMANDA_ASSETS?.[path] || path;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -471,7 +473,14 @@ async function startPracticeRecording() {
   $("#practiceRecord").disabled = true;
   $("#speechStatus").textContent = "請允許麥克風，取得權限後會立即開始錄音。";
   try {
-    state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
   } catch (error) {
     $("#practiceRecord").disabled = false;
     $("#speechStatus").textContent = "沒有取得麥克風權限，請允許後再試一次。";
@@ -486,7 +495,9 @@ function startRecording(item) {
   const session = state.shadowSession;
   state.recordingChunks = [];
   state.recognitionText = "";
-  const options = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"]
+  const options = (isIOS
+    ? ["audio/mp4"]
+    : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"])
     .find((type) => MediaRecorder.isTypeSupported(type));
   state.recorder = options
     ? new MediaRecorder(state.micStream, { mimeType: options })
@@ -498,7 +509,9 @@ function startRecording(item) {
     setTimeout(() => finishShadowRecording(item, session), 650);
   }, { once: true });
 
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  // iOS WebKit may let recognition and MediaRecorder compete for the microphone.
+  // Prioritize a usable recording there; other supported browsers keep text feedback.
+  const Recognition = isIOS ? null : (window.SpeechRecognition || window.webkitSpeechRecognition);
   if (Recognition) {
     state.recognition = new Recognition();
     state.recognition.lang = "en-US";
@@ -519,9 +532,10 @@ function startRecording(item) {
     }
   }
 
-  state.recorder.start();
+  if (isIOS) state.recorder.start();
+  else state.recorder.start(250);
   $("#speechStatus").textContent = "正在錄音，請直接說出上面的英文句子。";
-  $("#recognizedText").textContent = "正在聽你說…";
+  $("#recognizedText").textContent = isIOS ? "錄音完成後可以直接播放檢查。" : "正在聽你說…";
   $("#practiceRecord").hidden = true;
   $("#practiceStop").hidden = false;
   state.recordingTimer = setTimeout(stopPracticeRecording, 12_000);
@@ -539,19 +553,44 @@ function stopPracticeRecording() {
   }
   if (state.recorder?.state === "recording") {
     $("#speechStatus").textContent = "正在整理你的跟讀結果…";
-    state.recorder.stop();
+    if (isIOS) {
+      state.recorder.stop();
+      return;
+    }
+    try {
+      state.recorder.requestData();
+    } catch (error) {
+      // Some browsers flush data only when stop() is called.
+    }
+    setTimeout(() => {
+      if (state.recorder?.state === "recording") state.recorder.stop();
+    }, 120);
   }
 }
 
 function finishShadowRecording(item, session) {
   if (session !== state.shadowSession) return;
+  const recordedType = state.recordingChunks.find((chunk) => chunk.type)?.type
+    || state.recorder?.mimeType
+    || (isIOS ? "audio/mp4" : "audio/webm");
   const blob = new Blob(state.recordingChunks, {
-    type: state.recorder?.mimeType || "audio/mp4",
+    type: recordedType,
   });
+  if (blob.size < 1000) {
+    stopMicrophone();
+    $("#practiceRecord").hidden = false;
+    $("#practiceRecord").disabled = false;
+    $("#practiceStop").hidden = true;
+    $("#speechScore").textContent = "這次沒有錄到聲音";
+    $("#recognizedText").textContent = "請確認沒有其他 App 正在使用麥克風，再按一次「開始跟讀」。";
+    $("#speechStatus").textContent = "錄音資料太小，沒有建立可播放的聲音。";
+    return;
+  }
   if (state.recordingUrl) URL.revokeObjectURL(state.recordingUrl);
   state.recordingUrl = URL.createObjectURL(blob);
   const playback = $("#recordingPlayback");
   playback.src = state.recordingUrl;
+  playback.load();
   playback.hidden = false;
   stopMicrophone();
 
@@ -559,7 +598,12 @@ function finishShadowRecording(item, session) {
   $("#practiceRecord").disabled = false;
   $("#practiceStop").hidden = true;
 
-  if (state.recognitionText) {
+  if (isIOS) {
+    $("#speechScore").textContent = "錄音完成";
+    $("#recognizedText").textContent = "iPhone 版先以錄音重聽為主，避免語音辨識搶走麥克風而錄不到聲音。";
+    $("#wordFeedback").innerHTML = "";
+    $("#speechStatus").textContent = "請按下方播放鍵，檢查自己的發音；也可以再錄一次。";
+  } else if (state.recognitionText) {
     renderSpeechComparison(item.sentence, state.recognitionText);
     $("#speechStatus").textContent = "分析完成。可以播放自己的錄音，或再錄一次。";
   } else {
