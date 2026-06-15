@@ -1,5 +1,5 @@
-const CACHE="amanda-english-github-51f753bb8c";
+const CACHE="amanda-english-github-141604fb57";
 const CORE=["./","./index.html","./style.css","./app.js","./words.json","./manifest.webmanifest","./icon-192.svg","./icon-512.svg","./chunk-1.js","./chunk-2.js","./chunk-3.js","./chunk-4.js"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)));self.skipWaiting();});
-self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))));self.clients.claim();});
-self.addEventListener("fetch",e=>{e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request).then(r=>{if(e.request.method==="GET"&&r.ok){const x=r.clone();caches.open(CACHE).then(k=>k.put(e.request,x));}return r;})));});
+self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim()).then(()=>self.clients.matchAll({type:"window"})).then(cs=>Promise.all(cs.map(c=>c.navigate(c.url)))));});
+self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;const u=new URL(e.request.url);const fresh=e.request.mode==="navigate"||/\.(?:html|js|css|json|webmanifest)$/.test(u.pathname);if(fresh){e.respondWith(fetch(e.request,{cache:"no-store"}).then(r=>{if(r.ok){const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));}return r;}).catch(()=>caches.match(e.request)));return;}e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request).then(r=>{if(r.ok){const x=r.clone();caches.open(CACHE).then(k=>k.put(e.request,x));}return r;})));});

@@ -44,6 +44,15 @@ img { display: block; max-width: 100%; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-family: Georgia, "Noto Serif TC", serif; letter-spacing: .02em; }
 .brand small { margin-top: 2px; color: #807368; font-size: 11px; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.profile-button {
+  display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 5px 12px 5px 5px;
+  color: var(--coffee); background: rgba(255,253,248,.75); font-weight: 800;
+}
+.profile-button span {
+  width: 29px; height: 29px; display: grid; place-items: center; border-radius: 50%;
+  color: white; background: var(--sage); font-family: Georgia, serif;
+}
 .icon-button, .text-button {
   border: 0; background: transparent; color: var(--coffee); font-weight: 700;
 }
@@ -71,7 +80,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 .full { width: 100%; }
 
 .stats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 24px 0 70px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 24px 0 70px;
   border-radius: 20px; overflow: hidden; background: var(--line);
 }
 .stats div { background: rgba(255,253,248,.72); padding: 20px; text-align: center; }
@@ -220,6 +229,29 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 .privacy-note { margin: 12px 0 0; color: #8a7e74 !important; font-size: 11px; line-height: 1.5; }
 
 .modal-open { overflow: hidden; }
+.profile-modal, .practice-modal { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 20px; }
+.profile-modal[hidden], .practice-modal[hidden] { display: none; }
+.profile-backdrop, .practice-backdrop { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(43,36,31,.58); backdrop-filter: blur(5px); }
+.profile-dialog, .practice-dialog {
+  position: relative; z-index: 1; width: min(600px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto;
+  padding: clamp(24px, 5vw, 38px); border-radius: 28px; background: var(--paper); box-shadow: 0 24px 80px rgba(35,29,25,.3);
+}
+.profile-dialog h2 { margin: 7px 42px 8px 0; font: 600 clamp(28px, 5vw, 38px)/1.25 Georgia, serif; }
+.profile-dialog > p:not(.eyebrow):not(.profile-note) { color: #817469; line-height: 1.65; }
+.profile-list { display: grid; gap: 8px; margin: 20px 0; }
+.profile-choice {
+  display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line);
+  border-radius: 14px; padding: 12px 15px; background: var(--ivory); text-align: left; font-weight: 800;
+}
+.profile-choice small { color: #887a70; font-weight: 600; }
+.profile-form { display: grid; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+.profile-form label { color: #76695f; font-size: 12px; font-weight: 800; }
+.profile-form input {
+  width: 100%; height: 52px; border: 1px solid var(--line); border-radius: 14px; padding: 0 15px;
+  outline: 0; color: var(--coffee-dark); background: white; font-size: 17px;
+}
+.profile-form input:focus { border-color: var(--sage); box-shadow: 0 0 0 4px rgba(127,145,128,.14); }
+.profile-note { margin: 16px 0 0; color: #8a7e74; font-size: 11px; line-height: 1.55; }
 .practice-modal { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 20px; }
 .practice-modal[hidden] { display: none; }
 .practice-backdrop { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(43,36,31,.58); backdrop-filter: blur(5px); }
@@ -266,6 +298,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 @media (max-width: 580px) {
   .topbar { height: 64px; }
   .brand small { display: none; }
+  .profile-button strong { display: none; }
+  .profile-button { padding-right: 5px; }
   .icon-button { font-size: 12px; }
   main { padding: 14px 14px 120px; }
   .hero { height: 455px; border-radius: 24px; }
@@ -276,11 +310,13 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
   .hero-content > p:not(.eyebrow) { margin: 14px 0 20px; font-size: 14px; }
   .stats { margin-bottom: 52px; }
   .stats div { padding: 16px 8px; }
+  .stats strong { font-size: 23px; }
+  .stats span { font-size: 10px; }
   .card-grid { grid-template-columns: 1fr; gap: 16px; }
   .image-wrap { height: 230px; }
   .section-heading { align-items: center; }
-  .practice-modal { padding: 10px; }
-  .practice-dialog { max-height: calc(100dvh - 20px); border-radius: 23px; }
+  .profile-modal, .practice-modal { padding: 10px; }
+  .profile-dialog, .practice-dialog { max-height: calc(100dvh - 20px); border-radius: 23px; }
   .letter-input, .letter-fixed { width: 32px; height: 45px; font-size: 20px; }
   .spelling-area { gap: 5px; padding-inline: 4px; }
 }

@@ -18,7 +18,10 @@
       <span class="brand-mark">A</span>
       <span><strong>Amanda English</strong><small>每天 10 分鐘，從熟悉的生活開始</small></span>
     </a>
-    <button class="icon-button" id="installButton" hidden>加入主畫面</button>
+    <div class="topbar-actions">
+      <button class="profile-button" id="profileButton" hidden><span id="profileInitial">M</span><strong id="profileName"></strong></button>
+      <button class="icon-button" id="installButton" hidden>加入主畫面</button>
+    </div>
   </header>
 
   <main>
@@ -35,6 +38,7 @@
 
     <section class="stats" aria-label="學習進度">
       <div><strong id="learnedCount">0</strong><span>已熟悉</span></div>
+      <div><strong id="viewedCount">0</strong><span>看過或練過</span></div>
       <div><strong id="streakCount">1</strong><span>連續天數</span></div>
       <div><strong id="totalCount">60</strong><span>生活情境</span></div>
     </section>
@@ -105,6 +109,23 @@
       </div>
     </article>
   </template>
+
+  <div class="profile-modal" id="profileModal" hidden>
+    <div class="profile-backdrop"></div>
+    <section class="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <button class="practice-close" id="profileClose" aria-label="關閉使用者切換">×</button>
+      <p class="eyebrow">個人學習紀錄</p>
+      <h2 id="profileTitle">你叫什麼名字？</h2>
+      <p>只需要輸入名字，不用密碼。這台裝置會記住每個人的學習進度。</p>
+      <div class="profile-list" id="profileList"></div>
+      <form class="profile-form" id="profileForm">
+        <label for="profileInput">使用者名稱</label>
+        <input id="profileInput" maxlength="30" autocomplete="name" placeholder="例如 Mark、Amanda" required>
+        <button class="primary-button full" type="submit">進入我的學習頁面</button>
+      </form>
+      <p class="profile-note">紀錄只存在目前裝置與瀏覽器，不會上傳姓名，也不會自動同步到另一支手機。</p>
+    </section>
+  </div>
 
   <div class="practice-modal" id="practiceModal" hidden>
     <button class="practice-backdrop" id="practiceBackdrop" aria-label="關閉跟讀"></button>

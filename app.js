@@ -2,7 +2,10 @@ const state = {
   words: [],
   filter: "all",
   query: "",
-  learned: new Set(JSON.parse(localStorage.getItem("learnedWords") || "[]")),
+  currentProfileId: "",
+  currentProfileName: "",
+  learned: new Set(),
+  viewed: new Set(),
   dailyOffset: 0,
   dailyWords: [],
   quiz: [],
@@ -27,6 +30,8 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const labels = { hair: "髮廊英文", life: "生活英文" };
 const assetUrl = (path) => window.AMANDA_ASSETS?.[path] || path;
+const profilesKey = "amandaEnglishProfiles";
+const currentProfileKey = "amandaEnglishCurrentProfile";
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
@@ -45,11 +50,8 @@ async function init() {
     const hero = document.querySelector("#heroImage");
     if (hero) hero.src = assetUrl("assets/images/hero-publish.jpg");
     $("#totalCount").textContent = state.words.length;
-    updateLearnedCount();
-    updateStreak();
     bindEvents();
-    renderCards(state.words, $("#cardGrid"));
-    renderDaily();
+    initializeProfiles();
     registerPwa();
   } catch (error) {
     document.body.innerHTML = `<main class="error"><h1>頁面需要透過啟動器開啟</h1><p>請雙擊資料夾內的「啟動英文學習.command」，不要直接雙擊 index.html。</p></main>`;
@@ -82,9 +84,133 @@ function bindEvents() {
   $("#recognizeButton").addEventListener("click", startSeparateRecognition);
   $("#practiceClose").addEventListener("click", closePractice);
   $("#practiceBackdrop").addEventListener("click", closePractice);
+  $("#profileButton").addEventListener("click", () => showProfileModal(true));
+  $("#profileClose").addEventListener("click", hideProfileModal);
+  $("#profileForm").addEventListener("submit", submitProfile);
+  $("#profileList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-profile-id]");
+    if (button) selectProfile(button.dataset.profileId);
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !$("#practiceModal").hidden) closePractice();
   });
+}
+
+function readProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(profilesKey) || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeProfiles(profiles) {
+  localStorage.setItem(profilesKey, JSON.stringify(profiles));
+}
+
+function profileIdFor(name) {
+  return name.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+function initializeProfiles() {
+  const profiles = readProfiles();
+  const savedId = localStorage.getItem(currentProfileKey);
+  if (savedId && profiles[savedId]) {
+    selectProfile(savedId, false);
+  } else {
+    renderProfileChoices();
+    showProfileModal(false);
+  }
+}
+
+function submitProfile(event) {
+  event.preventDefault();
+  const name = $("#profileInput").value.trim();
+  if (!name) return;
+  const id = profileIdFor(name);
+  const profiles = readProfiles();
+  if (!profiles[id]) {
+    const legacyLearned = Object.keys(profiles).length === 0
+      ? JSON.parse(localStorage.getItem("learnedWords") || "[]")
+      : [];
+    const legacyStreak = Object.keys(profiles).length === 0
+      ? JSON.parse(localStorage.getItem("learningStreak") || "{}")
+      : {};
+    profiles[id] = {
+      name,
+      learned: legacyLearned,
+      viewed: legacyLearned,
+      streak: legacyStreak,
+      createdAt: new Date().toISOString(),
+    };
+    writeProfiles(profiles);
+  }
+  $("#profileInput").value = "";
+  selectProfile(id);
+}
+
+function selectProfile(id, closeModal = true) {
+  saveCurrentProfile();
+  const profiles = readProfiles();
+  const profile = profiles[id];
+  if (!profile) return;
+  state.currentProfileId = id;
+  state.currentProfileName = profile.name;
+  state.learned = new Set(profile.learned || []);
+  state.viewed = new Set(profile.viewed || []);
+  localStorage.setItem(currentProfileKey, id);
+  $("#profileName").textContent = profile.name;
+  $("#profileInitial").textContent = profile.name.trim().charAt(0).toUpperCase() || "A";
+  $("#profileButton").hidden = false;
+  updateProgressCounts();
+  updateStreak();
+  renderCards(state.words, $("#cardGrid"));
+  renderDaily();
+  if (closeModal) hideProfileModal();
+}
+
+function saveCurrentProfile() {
+  if (!state.currentProfileId) return;
+  const profiles = readProfiles();
+  const profile = profiles[state.currentProfileId];
+  if (!profile) return;
+  profile.learned = [...state.learned];
+  profile.viewed = [...state.viewed];
+  profiles[state.currentProfileId] = profile;
+  writeProfiles(profiles);
+}
+
+function renderProfileChoices() {
+  const profiles = readProfiles();
+  const container = $("#profileList");
+  container.innerHTML = "";
+  Object.entries(profiles).forEach(([id, profile]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "profile-choice";
+    button.dataset.profileId = id;
+    const name = document.createElement("span");
+    name.textContent = profile.name;
+    const progress = document.createElement("small");
+    progress.textContent = `熟悉 ${(profile.learned || []).length} 個・練過 ${(profile.viewed || []).length} 個`;
+    button.append(name, progress);
+    container.appendChild(button);
+  });
+  container.hidden = container.childElementCount === 0;
+}
+
+function showProfileModal(canClose) {
+  renderProfileChoices();
+  $("#profileClose").hidden = !canClose || !state.currentProfileId;
+  $("#profileModal").hidden = false;
+  document.body.classList.add("modal-open");
+  setTimeout(() => $("#profileInput").focus(), 0);
+}
+
+function hideProfileModal() {
+  if (!state.currentProfileId) return;
+  $("#profileModal").hidden = true;
+  document.body.classList.remove("modal-open");
 }
 
 function switchView(view) {
@@ -123,9 +249,18 @@ function renderCards(words, container) {
     const learned = fragment.querySelector(".learn-button");
     learned.classList.toggle("learned", state.learned.has(item.id));
     learned.addEventListener("click", () => toggleLearned(item.id, learned));
-    fragment.querySelector(".word-audio").addEventListener("click", (event) => playAudio(item.wordAudio, event.currentTarget));
-    fragment.querySelector(".sentence-audio").addEventListener("click", (event) => playAudio(item.sentenceAudio, event.currentTarget));
-    fragment.querySelector(".shadow-button").addEventListener("click", () => openPractice(item));
+    fragment.querySelector(".word-audio").addEventListener("click", (event) => {
+      markViewed(item.id);
+      playAudio(item.wordAudio, event.currentTarget);
+    });
+    fragment.querySelector(".sentence-audio").addEventListener("click", (event) => {
+      markViewed(item.id);
+      playAudio(item.sentenceAudio, event.currentTarget);
+    });
+    fragment.querySelector(".shadow-button").addEventListener("click", () => {
+      markViewed(item.id);
+      openPractice(item);
+    });
     card.dataset.id = item.id;
     container.appendChild(fragment);
   });
@@ -151,27 +286,41 @@ function playAudio(path, button, onEnded) {
 }
 
 function toggleLearned(id, button) {
+  markViewed(id);
   if (state.learned.has(id)) state.learned.delete(id);
   else state.learned.add(id);
-  localStorage.setItem("learnedWords", JSON.stringify([...state.learned]));
   button.classList.toggle("learned", state.learned.has(id));
-  updateLearnedCount();
+  saveCurrentProfile();
+  updateProgressCounts();
   showToast(state.learned.has(id) ? "已加入熟悉清單" : "已取消標記");
 }
 
-function updateLearnedCount() {
+function markViewed(id) {
+  if (state.viewed.has(id)) return;
+  state.viewed.add(id);
+  saveCurrentProfile();
+  updateProgressCounts();
+}
+
+function updateProgressCounts() {
   $("#learnedCount").textContent = state.learned.size;
+  $("#viewedCount").textContent = state.viewed.size;
 }
 
 function updateStreak() {
+  if (!state.currentProfileId) return;
   const today = localDateKey();
-  const saved = JSON.parse(localStorage.getItem("learningStreak") || "{}");
+  const profiles = readProfiles();
+  const profile = profiles[state.currentProfileId];
+  const saved = profile?.streak || {};
   let count = saved.count || 1;
   if (saved.date && saved.date !== today) {
     const gap = Math.round((new Date(today) - new Date(saved.date)) / 86400000);
     count = gap === 1 ? count + 1 : 1;
   }
-  localStorage.setItem("learningStreak", JSON.stringify({ date: today, count }));
+  profile.streak = { date: today, count };
+  profiles[state.currentProfileId] = profile;
+  writeProfiles(profiles);
   $("#streakCount").textContent = count;
 }
 
@@ -241,6 +390,7 @@ function resetQuizPanel() {
 
 function renderQuiz() {
   const item = state.quiz[state.quizIndex];
+  markViewed(item.id);
   $("#quizProgress").textContent = `${state.quizIndex + 1} / ${state.quiz.length}`;
   $("#quizScore").textContent = `完成 ${state.quizResults.length} 題`;
   $("#quizImage").src = assetUrl(item.image);
@@ -840,7 +990,16 @@ function showToast(message) {
 }
 
 function registerPwa() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((registration) => {
+      registration.update();
+    });
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (sessionStorage.getItem("amandaReloadedForUpdate")) return;
+      sessionStorage.setItem("amandaReloadedForUpdate", "1");
+      window.location.reload();
+    });
+  }
   let installPrompt;
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
