@@ -19,6 +19,7 @@ const state = {
   recognition: null,
   recognitionText: "",
   recordingTimer: null,
+  recognitionTimer: null,
   shadowSession: 0,
 };
 
@@ -78,6 +79,7 @@ function bindEvents() {
   $("#practiceListen").addEventListener("click", playPracticeExample);
   $("#practiceRecord").addEventListener("click", startPracticeRecording);
   $("#practiceStop").addEventListener("click", stopPracticeRecording);
+  $("#recognizeButton").addEventListener("click", startSeparateRecognition);
   $("#practiceClose").addEventListener("click", closePractice);
   $("#practiceBackdrop").addEventListener("click", closePractice);
   document.addEventListener("keydown", (event) => {
@@ -600,9 +602,10 @@ function finishShadowRecording(item, session) {
 
   if (isIOS) {
     $("#speechScore").textContent = "錄音完成";
-    $("#recognizedText").textContent = "iPhone 版先以錄音重聽為主，避免語音辨識搶走麥克風而錄不到聲音。";
+    $("#recognizedText").textContent = "先播放確認錄音；要看英文文字，請再按一次「辨識我念的英文」。";
     $("#wordFeedback").innerHTML = "";
-    $("#speechStatus").textContent = "請按下方播放鍵，檢查自己的發音；也可以再錄一次。";
+    $("#speechStatus").textContent = "錄音完成。文字辨識改為第二步，避免和錄音搶用麥克風。";
+    $("#recognizeButton").hidden = false;
   } else if (state.recognitionText) {
     renderSpeechComparison(item.sentence, state.recognitionText);
     $("#speechStatus").textContent = "分析完成。可以播放自己的錄音，或再錄一次。";
@@ -614,10 +617,97 @@ function finishShadowRecording(item, session) {
   }
 }
 
+function startSeparateRecognition() {
+  const item = state.practiceItem;
+  if (!item) return;
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    $("#speechStatus").textContent = "這個手機瀏覽器沒有提供網頁語音辨識。錄音重聽仍可正常使用。";
+    $("#recognizedText").textContent = "目前無法在這個瀏覽器將聲音轉成英文文字。";
+    $("#recognizeButton").hidden = true;
+    return;
+  }
+
+  clearTimeout(state.recognitionTimer);
+  if (state.recognition) {
+    try {
+      state.recognition.abort();
+    } catch (error) {
+      // Recognition may already be inactive.
+    }
+  }
+
+  const recognition = new Recognition();
+  state.recognition = recognition;
+  recognition.lang = "en-US";
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 5;
+
+  $("#recognizeButton").disabled = true;
+  $("#recognizeButton").classList.add("listening");
+  $("#speechScore").textContent = "";
+  $("#recognizedText").textContent = "正在聽你說…";
+  $("#wordFeedback").innerHTML = "";
+  $("#speechStatus").textContent = "請現在再念一次上面的英文句子。念完後稍等一下，系統會自動顯示結果。";
+
+  recognition.addEventListener("result", (event) => {
+    const result = event.results[event.results.length - 1];
+    const alternatives = [...result].map((entry) => entry.transcript);
+    const transcript = pickClosestTranscript(item.sentence, alternatives);
+    $("#recognizedText").textContent = transcript || "正在辨識…";
+    if (result.isFinal && transcript) {
+      state.recognitionText = transcript;
+      renderSpeechComparison(item.sentence, transcript);
+      $("#speechStatus").textContent = "文字辨識完成。綠色是吻合的字，紅色是需要再試一次的字。";
+    }
+  });
+  recognition.addEventListener("nomatch", () => {
+    $("#recognizedText").textContent = "沒有辨識到清楚的英文，請靠近手機再試一次。";
+  });
+  recognition.addEventListener("error", (event) => {
+    const messages = {
+      "not-allowed": "語音辨識沒有取得麥克風權限。",
+      "audio-capture": "手機沒有收到麥克風聲音。",
+      network: "語音辨識需要網路，這次連線沒有成功。",
+      "no-speech": "沒有聽到清楚的說話聲音。",
+      aborted: "這次辨識已停止。",
+    };
+    $("#speechStatus").textContent = messages[event.error] || `語音辨識暫時失敗（${event.error}）。`;
+    if (!state.recognitionText) $("#recognizedText").textContent = "請按按鈕再念一次。";
+  });
+  recognition.addEventListener("end", () => {
+    clearTimeout(state.recognitionTimer);
+    state.recognitionTimer = null;
+    $("#recognizeButton").disabled = false;
+    $("#recognizeButton").classList.remove("listening");
+    if ($("#recognizedText").textContent === "正在聽你說…") {
+      $("#recognizedText").textContent = "沒有收到辨識結果，請再試一次。";
+    }
+  });
+
+  try {
+    recognition.start();
+    state.recognitionTimer = setTimeout(() => {
+      try {
+        recognition.stop();
+      } catch (error) {
+        // Recognition may already have stopped automatically.
+      }
+    }, 10_000);
+  } catch (error) {
+    $("#recognizeButton").disabled = false;
+    $("#recognizeButton").classList.remove("listening");
+    $("#speechStatus").textContent = "手機目前無法啟動文字辨識，請稍後再試。";
+  }
+}
+
 function resetPracticeRecording() {
   state.shadowSession += 1;
   clearTimeout(state.recordingTimer);
   state.recordingTimer = null;
+  clearTimeout(state.recognitionTimer);
+  state.recognitionTimer = null;
   if (state.recorder?.state === "recording") state.recorder.stop();
   if (state.recognition) {
     try {
@@ -642,6 +732,9 @@ function resetPracticeRecording() {
   $("#wordFeedback").innerHTML = "";
   $("#recordingPlayback").hidden = true;
   $("#recordingPlayback").removeAttribute("src");
+  $("#recognizeButton").hidden = true;
+  $("#recognizeButton").disabled = false;
+  $("#recognizeButton").classList.remove("listening");
 }
 
 function stopMicrophone() {

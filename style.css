@@ -210,6 +210,13 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 .speech-word.missing, .speech-word.different { color: #8b5548; background: #f0dbd4; }
 .speech-word.extra { color: #806c3e; background: #eee5c9; }
 .speech-result audio { width: 100%; margin-top: 4px; }
+.recognize-button {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; border: 1px solid #b8a99d;
+  border-radius: 999px; padding: 12px 17px; color: var(--coffee); background: white; font-weight: 800;
+}
+.recognize-button[hidden] { display: none; }
+.recognize-button.listening { color: white; background: #9a6659; border-color: #9a6659; animation: recording-pulse 1.5s ease-in-out infinite; }
+.recognize-button:disabled { opacity: .72; }
 .privacy-note { margin: 12px 0 0; color: #8a7e74 !important; font-size: 11px; line-height: 1.5; }
 
 .modal-open { overflow: hidden; }

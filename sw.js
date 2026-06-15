@@ -1,4 +1,4 @@
-const CACHE="amanda-english-github-d8f679de40";
+const CACHE="amanda-english-github-51f753bb8c";
 const CORE=["./","./index.html","./style.css","./app.js","./words.json","./manifest.webmanifest","./icon-192.svg","./icon-512.svg","./chunk-1.js","./chunk-2.js","./chunk-3.js","./chunk-4.js"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)));self.skipWaiting();});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))));self.clients.claim();});
