@@ -77,40 +77,12 @@
       </div>
     </section>
 
-    <section class="view" id="shadow">
-      <div class="section-heading">
-        <div><p class="eyebrow">句子跟讀</p><h2>聽一句，停 3 秒，換你說</h2></div>
-      </div>
-      <div class="shadow-panel">
-        <img id="shadowImage" alt="">
-        <span class="category-pill" id="shadowCategory"></span>
-        <h2 id="shadowSentence"></h2>
-        <p id="shadowTranslation"></p>
-        <div class="countdown" id="countdown">準備好了就按播放</div>
-        <button class="play-large" id="shadowPlay"><span>▶</span>播放並跟讀</button>
-        <button class="record-stop" id="shadowStop" hidden><span>■</span>我說完了</button>
-        <section class="speech-result" id="speechResult" hidden aria-live="polite">
-          <p class="eyebrow">這次的跟讀結果</p>
-          <div class="speech-score" id="speechScore"></div>
-          <p class="recognized-label">手機聽到：</p>
-          <p class="recognized-text" id="recognizedText"></p>
-          <div class="word-feedback" id="wordFeedback"></div>
-          <audio id="recordingPlayback" controls hidden></audio>
-          <p class="privacy-note">錄音檔只暫存在這個頁面；文字辨識可能由手機或瀏覽器的語音服務處理。離開或重新整理後，頁面內的錄音就會消失。</p>
-        </section>
-        <div class="shadow-actions">
-          <button class="text-button" id="previousShadow">上一句</button>
-          <button class="text-button" id="nextShadow">下一句</button>
-        </div>
-      </div>
-    </section>
   </main>
 
   <nav class="bottom-nav" aria-label="主要功能">
     <button class="active" data-view="learn"><span>▦</span>圖卡</button>
     <button data-view="today"><span>☀</span>今日</button>
     <button data-view="quiz"><span>◇</span>測驗</button>
-    <button data-view="shadow"><span>◉</span>跟讀</button>
   </nav>
 
   <template id="cardTemplate">
@@ -125,11 +97,39 @@
         <div class="sentence">
           <p class="english-sentence"></p>
           <p class="translation"></p>
-          <button class="sentence-audio"><span>▶</span>聽完整句子</button>
+          <div class="sentence-actions">
+            <button class="sentence-audio"><span>▶</span>聽完整句子</button>
+            <button class="shadow-button"><span>●</span>跟讀錄音</button>
+          </div>
         </div>
       </div>
     </article>
   </template>
+
+  <div class="practice-modal" id="practiceModal" hidden>
+    <button class="practice-backdrop" id="practiceBackdrop" aria-label="關閉跟讀"></button>
+    <section class="practice-dialog" role="dialog" aria-modal="true" aria-labelledby="practiceTitle">
+      <button class="practice-close" id="practiceClose" aria-label="關閉跟讀">×</button>
+      <p class="eyebrow">圖卡跟讀</p>
+      <h2 id="practiceTitle"></h2>
+      <p class="practice-translation" id="practiceTranslation"></p>
+      <div class="practice-controls">
+        <button class="practice-listen" id="practiceListen"><span>▶</span>先聽示範</button>
+        <button class="practice-record" id="practiceRecord"><span>●</span>開始跟讀</button>
+        <button class="record-stop" id="practiceStop" hidden><span>■</span>我說完了</button>
+      </div>
+      <section class="speech-result" id="speechResult" aria-live="polite">
+        <p class="eyebrow">這次的跟讀結果</p>
+        <div class="speech-status" id="speechStatus">按「開始跟讀」後會立即錄音，不用等待。</div>
+        <div class="speech-score" id="speechScore"></div>
+        <p class="recognized-label">手機聽到：</p>
+        <p class="recognized-text" id="recognizedText">尚未錄音</p>
+        <div class="word-feedback" id="wordFeedback"></div>
+        <audio id="recordingPlayback" controls hidden></audio>
+        <p class="privacy-note">錄音檔只暫存在這個頁面；文字辨識可能由手機或瀏覽器的語音服務處理。離開或重新整理後，頁面內的錄音就會消失。</p>
+      </section>
+    </section>
+  </div>
 
   <div class="toast" id="toast" role="status"></div>
   <script src="chunk-1.js"></script>

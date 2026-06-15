@@ -10,7 +10,7 @@ const state = {
   quizScore: 0,
   quizLevel: 1,
   quizResults: [],
-  shadowIndex: 0,
+  practiceItem: null,
   audio: null,
   micStream: null,
   recorder: null,
@@ -47,7 +47,6 @@ async function init() {
     bindEvents();
     renderCards(state.words, $("#cardGrid"));
     renderDaily();
-    renderShadow();
     registerPwa();
   } catch (error) {
     document.body.innerHTML = `<main class="error"><h1>頁面需要透過啟動器開啟</h1><p>請雙擊資料夾內的「啟動英文學習.command」，不要直接雙擊 index.html。</p></main>`;
@@ -74,10 +73,14 @@ function bindEvents() {
     startQuiz();
     showToast("今日圖卡與測驗已同步換成新的一組");
   });
-  $("#shadowPlay").addEventListener("click", playShadow);
-  $("#shadowStop").addEventListener("click", stopShadowRecording);
-  $("#previousShadow").addEventListener("click", () => changeShadow(-1));
-  $("#nextShadow").addEventListener("click", () => changeShadow(1));
+  $("#practiceListen").addEventListener("click", playPracticeExample);
+  $("#practiceRecord").addEventListener("click", startPracticeRecording);
+  $("#practiceStop").addEventListener("click", stopPracticeRecording);
+  $("#practiceClose").addEventListener("click", closePractice);
+  $("#practiceBackdrop").addEventListener("click", closePractice);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("#practiceModal").hidden) closePractice();
+  });
 }
 
 function switchView(view) {
@@ -118,6 +121,7 @@ function renderCards(words, container) {
     learned.addEventListener("click", () => toggleLearned(item.id, learned));
     fragment.querySelector(".word-audio").addEventListener("click", (event) => playAudio(item.wordAudio, event.currentTarget));
     fragment.querySelector(".sentence-audio").addEventListener("click", (event) => playAudio(item.sentenceAudio, event.currentTarget));
+    fragment.querySelector(".shadow-button").addEventListener("click", () => openPractice(item));
     card.dataset.id = item.id;
     container.appendChild(fragment);
   });
@@ -433,77 +437,52 @@ function nextQuiz() {
   }
 }
 
-function renderShadow() {
-  resetShadowRecording();
-  const item = state.words[state.shadowIndex];
-  $("#shadowImage").src = assetUrl(item.image);
-  $("#shadowImage").alt = item.chinese;
-  $("#shadowCategory").textContent = item.customer ? "客戶對話" : labels[item.category];
-  $("#shadowSentence").textContent = item.sentence;
-  $("#shadowTranslation").textContent = item.translation;
-  $("#countdown").textContent = "準備好了就按播放";
+function openPractice(item) {
+  resetPracticeRecording();
+  state.practiceItem = item;
+  $("#practiceTitle").textContent = item.sentence;
+  $("#practiceTranslation").textContent = item.translation;
+  $("#practiceModal").hidden = false;
+  document.body.classList.add("modal-open");
 }
 
-function changeShadow(direction) {
-  state.shadowIndex = (state.shadowIndex + direction + state.words.length) % state.words.length;
-  renderShadow();
+function closePractice() {
+  resetPracticeRecording();
+  state.practiceItem = null;
+  $("#practiceModal").hidden = true;
+  document.body.classList.remove("modal-open");
 }
 
-async function playShadow() {
-  const item = state.words[state.shadowIndex];
-  const button = $("#shadowPlay");
-  resetShadowRecording();
+function playPracticeExample() {
+  if (!state.practiceItem) return;
+  playAudio(state.practiceItem.sentenceAudio, $("#practiceListen"));
+}
+
+async function startPracticeRecording() {
+  const item = state.practiceItem;
+  if (!item) return;
+  resetPracticeRecording();
 
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    $("#countdown").textContent = "這個瀏覽器不支援錄音，仍可使用原本的跟讀模式";
-    playShadowWithoutRecording(item, button);
+    $("#speechStatus").textContent = "這個瀏覽器不支援錄音，仍可使用「先聽示範」。";
     return;
   }
 
-  button.disabled = true;
-  $("#countdown").textContent = "請允許麥克風，錄音只會暫存在這個頁面";
+  $("#practiceRecord").disabled = true;
+  $("#speechStatus").textContent = "請允許麥克風，取得權限後會立即開始錄音。";
   try {
     state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (error) {
-    button.disabled = false;
-    $("#countdown").textContent = "沒有取得麥克風權限，仍可聽示範跟讀";
+    $("#practiceRecord").disabled = false;
+    $("#speechStatus").textContent = "沒有取得麥克風權限，請允許後再試一次。";
     showToast("需要允許麥克風，才能錄下你的發音");
-    playShadowWithoutRecording(item, button);
     return;
   }
 
-  $("#countdown").textContent = "先仔細聽…";
-  playAudio(item.sentenceAudio, button, () => {
-    let count = 3;
-    $("#countdown").textContent = `${count}`;
-    const timer = setInterval(() => {
-      count -= 1;
-      if (count > 0) $("#countdown").textContent = `${count}`;
-      else {
-        clearInterval(timer);
-        startShadowRecording(item);
-      }
-    }, 1000);
-  });
+  startRecording(item);
 }
 
-function playShadowWithoutRecording(item, button) {
-  playAudio(item.sentenceAudio, button, () => {
-    let count = 3;
-    $("#countdown").textContent = `${count}`;
-    const timer = setInterval(() => {
-      count -= 1;
-      if (count > 0) $("#countdown").textContent = `${count}`;
-      else {
-        clearInterval(timer);
-        $("#countdown").textContent = "換你說";
-        setTimeout(() => { $("#countdown").textContent = "很好，再說一次也可以"; }, 3500);
-      }
-    }, 1000);
-  });
-}
-
-function startShadowRecording(item) {
+function startRecording(item) {
   const session = state.shadowSession;
   state.recordingChunks = [];
   state.recognitionText = "";
@@ -541,13 +520,14 @@ function startShadowRecording(item) {
   }
 
   state.recorder.start();
-  $("#countdown").textContent = "正在錄音，請說出英文句子";
-  $("#shadowPlay").hidden = true;
-  $("#shadowStop").hidden = false;
-  state.recordingTimer = setTimeout(stopShadowRecording, 10000);
+  $("#speechStatus").textContent = "正在錄音，請直接說出上面的英文句子。";
+  $("#recognizedText").textContent = "正在聽你說…";
+  $("#practiceRecord").hidden = true;
+  $("#practiceStop").hidden = false;
+  state.recordingTimer = setTimeout(stopPracticeRecording, 12_000);
 }
 
-function stopShadowRecording() {
+function stopPracticeRecording() {
   clearTimeout(state.recordingTimer);
   state.recordingTimer = null;
   if (state.recognition) {
@@ -558,7 +538,7 @@ function stopShadowRecording() {
     }
   }
   if (state.recorder?.state === "recording") {
-    $("#countdown").textContent = "正在整理你的跟讀結果…";
+    $("#speechStatus").textContent = "正在整理你的跟讀結果…";
     state.recorder.stop();
   }
 }
@@ -575,23 +555,22 @@ function finishShadowRecording(item, session) {
   playback.hidden = false;
   stopMicrophone();
 
-  $("#shadowPlay").hidden = false;
-  $("#shadowPlay").disabled = false;
-  $("#shadowStop").hidden = true;
-  $("#speechResult").hidden = false;
+  $("#practiceRecord").hidden = false;
+  $("#practiceRecord").disabled = false;
+  $("#practiceStop").hidden = true;
 
   if (state.recognitionText) {
     renderSpeechComparison(item.sentence, state.recognitionText);
-    $("#countdown").textContent = "完成，可以重聽自己的發音";
+    $("#speechStatus").textContent = "分析完成。可以播放自己的錄音，或再錄一次。";
   } else {
     $("#speechScore").textContent = "錄音完成";
     $("#recognizedText").textContent = "這次手機沒有成功辨識文字，請重聽錄音後再試一次。";
     $("#wordFeedback").innerHTML = "";
-    $("#countdown").textContent = "錄音已保留在下方，可以重聽";
+    $("#speechStatus").textContent = "錄音已完成，可以在下方播放。";
   }
 }
 
-function resetShadowRecording() {
+function resetPracticeRecording() {
   state.shadowSession += 1;
   clearTimeout(state.recordingTimer);
   state.recordingTimer = null;
@@ -610,10 +589,14 @@ function resetShadowRecording() {
   state.recognition = null;
   state.recordingChunks = [];
   state.recognitionText = "";
-  $("#shadowPlay").hidden = false;
-  $("#shadowPlay").disabled = false;
-  $("#shadowStop").hidden = true;
-  $("#speechResult").hidden = true;
+  $("#practiceRecord").hidden = false;
+  $("#practiceRecord").disabled = false;
+  $("#practiceStop").hidden = true;
+  $("#speechStatus").textContent = "按「開始跟讀」後會立即錄音，不用等待。";
+  $("#speechScore").textContent = "";
+  $("#recognizedText").textContent = "尚未錄音";
+  $("#wordFeedback").innerHTML = "";
+  $("#recordingPlayback").hidden = true;
   $("#recordingPlayback").removeAttribute("src");
 }
 
