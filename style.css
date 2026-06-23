@@ -136,9 +136,19 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 .english-sentence { margin: 0; font-weight: 700; line-height: 1.55; }
 .translation { margin: 6px 0 13px; color: #8a7d72; font-size: 13px; line-height: 1.5; }
 .sentence-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
-.sentence-audio, .shadow-button { border: 0; padding: 0; background: transparent; color: var(--sage); font-size: 13px; font-weight: 800; }
-.sentence-audio span, .shadow-button span { margin-right: 5px; }
+.sentence-audio, .shadow-button, .self-listen-button { border: 0; padding: 0; background: transparent; color: var(--sage); font-size: 13px; font-weight: 800; }
+.sentence-audio span, .shadow-button span, .self-listen-button span { margin-right: 5px; }
 .shadow-button { color: #9a6659; }
+.shadow-button.recording {
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: white;
+  background: #9a6659;
+  animation: recording-pulse 1.1s ease-in-out infinite;
+}
+.self-listen-button { color: #3f6f55; }
+.self-listen-button.playing { animation: pulse 1s infinite; }
+.inline-recording-status { margin: 9px 0 0; color: #9b8d83; font-size: 12px; line-height: 1.5; }
 .empty-state { padding: 60px 20px; text-align: center; color: #887a70; }
 
 .daily-intro {

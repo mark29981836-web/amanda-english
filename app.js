@@ -19,6 +19,9 @@ const state = {
   recorder: null,
   recordingChunks: [],
   recordingUrl: null,
+  inlineRecording: null,
+  inlineRecordingTimer: null,
+  selfRecordingUrls: new Map(),
   recognition: null,
   recognitionText: "",
   recordingTimer: null,
@@ -256,9 +259,21 @@ function renderCards(words, container) {
       markViewed(item.id);
       playAudio(item.sentenceAudio, event.currentTarget);
     });
-    fragment.querySelector(".shadow-button").addEventListener("click", () => {
+    const shadowButton = fragment.querySelector(".shadow-button");
+    const selfListenButton = fragment.querySelector(".self-listen-button");
+    const inlineStatus = fragment.querySelector(".inline-recording-status");
+    const savedRecording = state.selfRecordingUrls.get(item.id);
+    if (savedRecording) {
+      selfListenButton.hidden = false;
+      selfListenButton.dataset.url = savedRecording.url;
+      inlineStatus.textContent = "已錄過，可以重聽自己的發音。";
+    }
+    shadowButton.addEventListener("click", () => {
       markViewed(item.id);
-      openPractice(item);
+      handleInlineShadow(item, shadowButton, selfListenButton, inlineStatus);
+    });
+    selfListenButton.addEventListener("click", (event) => {
+      playSelfRecording(event.currentTarget.dataset.url, event.currentTarget);
     });
     card.dataset.id = item.id;
     container.appendChild(fragment);
@@ -292,6 +307,212 @@ function toggleLearned(id, button) {
   saveCurrentProfile();
   updateProgressCounts();
   showToast(state.learned.has(id) ? "已加入熟悉清單" : "已取消標記");
+}
+
+async function handleInlineShadow(item, button, listenButton, status) {
+  if (state.inlineRecording?.itemId === item.id && state.inlineRecording?.recorder?.state === "recording") {
+    stopInlineRecording();
+    return;
+  }
+  if (state.inlineRecording?.recorder?.state === "recording") {
+    stopInlineRecording();
+  }
+  await startInlineRecording(item, button, listenButton, status);
+}
+
+async function startInlineRecording(item, button, listenButton, status) {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    status.textContent = "這個瀏覽器不支援錄音，仍可先聽完整句子。";
+    return;
+  }
+
+  button.disabled = true;
+  listenButton.hidden = true;
+  status.textContent = "請允許麥克風，取得權限後會立即開始錄音。";
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+    const options = (isIOS
+      ? ["audio/mp4"]
+      : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"])
+      .find((type) => MediaRecorder.isTypeSupported(type));
+    const recorder = options ? new MediaRecorder(stream, { mimeType: options }) : new MediaRecorder(stream);
+    const chunks = [];
+
+    state.inlineRecording = {
+      itemId: item.id,
+      button,
+      listenButton,
+      status,
+      stream,
+      recorder,
+      chunks,
+    };
+
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) chunks.push(event.data);
+    });
+    recorder.addEventListener("stop", () => finishInlineRecording(item.id), { once: true });
+
+    recorder.start(isIOS ? undefined : 250);
+    button.disabled = false;
+    button.classList.add("recording");
+    button.innerHTML = "<span>■</span>我唸完了";
+    status.textContent = "正在錄音，唸完後再按一次這顆紅色按鈕。";
+    clearTimeout(state.inlineRecordingTimer);
+    state.inlineRecordingTimer = setTimeout(stopInlineRecording, 12_000);
+  } catch (error) {
+    button.disabled = false;
+    status.textContent = "沒有取得麥克風權限，請允許後再試一次。";
+    showToast("需要允許麥克風，才能錄下你的發音");
+  }
+}
+
+function stopInlineRecording() {
+  clearTimeout(state.inlineRecordingTimer);
+  state.inlineRecordingTimer = null;
+  const active = state.inlineRecording;
+  if (!active || active.recorder.state !== "recording") return;
+  active.status.textContent = "正在整理你的錄音，稍等一下。";
+  if (isIOS) {
+    active.recorder.stop();
+    return;
+  }
+  try {
+    active.recorder.requestData();
+  } catch (error) {
+    // Some browsers flush audio only when stop() is called.
+  }
+  setTimeout(() => {
+    if (active.recorder.state === "recording") active.recorder.stop();
+  }, 120);
+}
+
+async function finishInlineRecording(itemId) {
+  const active = state.inlineRecording;
+  if (!active || active.itemId !== itemId) return;
+  const recordedType = active.chunks.find((chunk) => chunk.type)?.type
+    || active.recorder.mimeType
+    || (isIOS ? "audio/mp4" : "audio/webm");
+  const rawBlob = new Blob(active.chunks, { type: recordedType });
+  stopStream(active.stream);
+
+  active.button.classList.remove("recording");
+  active.button.innerHTML = "<span>●</span>換你唸一次";
+
+  if (rawBlob.size < 1000) {
+    active.status.textContent = "這次沒有錄到聲音，請再試一次。";
+    active.listenButton.hidden = true;
+    state.inlineRecording = null;
+    return;
+  }
+
+  active.status.textContent = "正在裁掉前後空白。";
+  const finalBlob = await trimRecordingSilence(rawBlob).catch(() => rawBlob);
+  const previous = state.selfRecordingUrls.get(itemId);
+  if (previous?.url) URL.revokeObjectURL(previous.url);
+  const url = URL.createObjectURL(finalBlob);
+  state.selfRecordingUrls.set(itemId, { url, blob: finalBlob });
+  active.listenButton.dataset.url = url;
+  active.listenButton.hidden = false;
+  active.status.textContent = "錄好了，可以按「聽聽自己」反覆播放。";
+  state.inlineRecording = null;
+}
+
+function playSelfRecording(url, button) {
+  if (!url) return;
+  if (state.audio) {
+    state.audio.pause();
+    $$(".playing").forEach((item) => item.classList.remove("playing"));
+  }
+  const audio = new Audio(url);
+  state.audio = audio;
+  button.classList.add("playing");
+  audio.addEventListener("ended", () => button.classList.remove("playing"), { once: true });
+  audio.addEventListener("error", () => {
+    button.classList.remove("playing");
+    showToast("錄音播放失敗，請再錄一次");
+  }, { once: true });
+  audio.play().catch(() => showToast("請再按一次播放"));
+}
+
+async function trimRecordingSilence(blob) {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return blob;
+  const audioContext = new AudioContext();
+  try {
+    const decoded = await audioContext.decodeAudioData(await blob.arrayBuffer());
+    const channelData = decoded.getChannelData(0);
+    const sampleRate = decoded.sampleRate;
+    const threshold = 0.018;
+    const padding = Math.floor(sampleRate * 0.08);
+    let start = 0;
+    let end = channelData.length - 1;
+
+    while (start < channelData.length && Math.abs(channelData[start]) < threshold) start += 1;
+    while (end > start && Math.abs(channelData[end]) < threshold) end -= 1;
+
+    start = Math.max(0, start - padding);
+    end = Math.min(channelData.length - 1, end + padding);
+    if (end <= start || end - start < sampleRate * 0.25) return blob;
+
+    const trimmedLength = end - start + 1;
+    const trimmed = audioContext.createBuffer(decoded.numberOfChannels, trimmedLength, sampleRate);
+    for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
+      trimmed.getChannelData(channel).set(decoded.getChannelData(channel).slice(start, end + 1));
+    }
+    return encodeWav(trimmed);
+  } finally {
+    audioContext.close?.();
+  }
+}
+
+function encodeWav(audioBuffer) {
+  const numberOfChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const samples = audioBuffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = numberOfChannels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + samples * blockAlign);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + samples * blockAlign, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numberOfChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, samples * blockAlign, true);
+
+  let offset = 44;
+  for (let index = 0; index < samples; index += 1) {
+    for (let channel = 0; channel < numberOfChannels; channel += 1) {
+      const value = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[index]));
+      view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([view], { type: "audio/wav" });
+}
+
+function writeAscii(view, offset, text) {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
 }
 
 function markViewed(id) {
@@ -751,8 +972,12 @@ function resetPracticeRecording() {
 }
 
 function stopMicrophone() {
-  state.micStream?.getTracks().forEach((track) => track.stop());
+  stopStream(state.micStream);
   state.micStream = null;
+}
+
+function stopStream(stream) {
+  stream?.getTracks().forEach((track) => track.stop());
 }
 
 function speechWords(text) {
