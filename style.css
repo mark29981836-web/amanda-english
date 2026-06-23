@@ -135,6 +135,18 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 130px; }
 .sentence { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .english-sentence { margin: 0; font-weight: 700; line-height: 1.55; }
 .translation { margin: 6px 0 13px; color: #8a7d72; font-size: 13px; line-height: 1.5; }
+.memory-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px;
+}
+.memory-actions button {
+  border: 1px solid rgba(127,145,128,.28); border-radius: 999px; padding: 6px 10px;
+  color: #7b7169; background: rgba(255,253,248,.7); font-size: 12px; font-weight: 800;
+}
+.memory-actions button.active {
+  color: white; border-color: transparent; background: var(--sage);
+}
+.memory-actions button[data-rating="unfamiliar"].active { background: #9a6659; }
+.memory-actions button[data-rating="learning"].active { background: #b28a5b; }
 .sentence-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .sentence-audio, .shadow-button, .self-listen-button { border: 0; padding: 0; background: transparent; color: var(--sage); font-size: 13px; font-weight: 800; }
 .sentence-audio span, .shadow-button span, .self-listen-button span { margin-right: 5px; }

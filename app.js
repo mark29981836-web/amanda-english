@@ -6,6 +6,7 @@ const state = {
   currentProfileName: "",
   learned: new Set(),
   viewed: new Set(),
+  wordRatings: {},
   dailyOffset: 0,
   dailyWords: [],
   quiz: [],
@@ -43,6 +44,16 @@ function localDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function addDays(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return localDateKey(date);
+}
+
+function daysBetween(leftKey, rightKey = localDateKey()) {
+  return Math.round((new Date(`${rightKey}T00:00:00`) - new Date(`${leftKey}T00:00:00`)) / 86400000);
 }
 
 async function init() {
@@ -142,6 +153,12 @@ function submitProfile(event) {
       name,
       learned: legacyLearned,
       viewed: legacyLearned,
+      ratings: Object.fromEntries(legacyLearned.map((wordId) => [wordId, {
+        level: "familiar",
+        updatedAt: localDateKey(),
+        nextReview: addDays(localDateKey(), 7),
+        reviews: 1,
+      }])),
       streak: legacyStreak,
       createdAt: new Date().toISOString(),
     };
@@ -160,6 +177,7 @@ function selectProfile(id, closeModal = true) {
   state.currentProfileName = profile.name;
   state.learned = new Set(profile.learned || []);
   state.viewed = new Set(profile.viewed || []);
+  state.wordRatings = profile.ratings || {};
   localStorage.setItem(currentProfileKey, id);
   $("#profileName").textContent = profile.name;
   $("#profileInitial").textContent = profile.name.trim().charAt(0).toUpperCase() || "A";
@@ -178,6 +196,7 @@ function saveCurrentProfile() {
   if (!profile) return;
   profile.learned = [...state.learned];
   profile.viewed = [...state.viewed];
+  profile.ratings = state.wordRatings;
   profiles[state.currentProfileId] = profile;
   writeProfiles(profiles);
 }
@@ -249,8 +268,17 @@ function renderCards(words, container) {
     fragment.querySelector(".english-sentence").textContent = item.sentence;
     fragment.querySelector(".translation").textContent = item.translation;
     const learned = fragment.querySelector(".learn-button");
-    learned.classList.toggle("learned", state.learned.has(item.id));
-    learned.addEventListener("click", () => toggleLearned(item.id, learned));
+    const memoryActions = fragment.querySelector(".memory-actions");
+    updateMemoryControls(fragment, item.id);
+    learned.addEventListener("click", () => {
+      const nextLevel = ratingFor(item.id).level === "familiar" ? "learning" : "familiar";
+      setWordRating(item.id, nextLevel, card);
+    });
+    memoryActions.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-rating]");
+      if (!button) return;
+      setWordRating(item.id, button.dataset.rating, card);
+    });
     fragment.querySelector(".word-audio").addEventListener("click", (event) => {
       markViewed(item.id);
       playAudio(item.wordAudio, event.currentTarget);
@@ -300,13 +328,67 @@ function playAudio(path, button, onEnded) {
 }
 
 function toggleLearned(id, button) {
+  const nextLevel = state.learned.has(id) ? "learning" : "familiar";
+  setWordRating(id, nextLevel, button.closest(".word-card"));
+}
+
+function ratingFor(id) {
+  const saved = state.wordRatings[id];
+  if (saved) return saved;
+  if (state.learned.has(id)) {
+    return {
+      level: "familiar",
+      updatedAt: localDateKey(),
+      nextReview: addDays(localDateKey(), 7),
+      reviews: 1,
+    };
+  }
+  if (state.viewed.has(id)) {
+    return {
+      level: "learning",
+      updatedAt: localDateKey(),
+      nextReview: addDays(localDateKey(), 2),
+      reviews: 0,
+    };
+  }
+  return {
+    level: "new",
+    updatedAt: "",
+    nextReview: localDateKey(),
+    reviews: 0,
+  };
+}
+
+function setWordRating(id, level, card) {
   markViewed(id);
-  if (state.learned.has(id)) state.learned.delete(id);
-  else state.learned.add(id);
-  button.classList.toggle("learned", state.learned.has(id));
+  const today = localDateKey();
+  const reviewGap = { unfamiliar: 1, learning: 3, familiar: 7 }[level] || 2;
+  const current = state.wordRatings[id] || {};
+  state.wordRatings[id] = {
+    level,
+    updatedAt: today,
+    nextReview: addDays(today, reviewGap),
+    reviews: (current.reviews || 0) + 1,
+  };
+  if (level === "familiar") state.learned.add(id);
+  else state.learned.delete(id);
   saveCurrentProfile();
   updateProgressCounts();
-  showToast(state.learned.has(id) ? "已加入熟悉清單" : "已取消標記");
+  if (card) updateMemoryControls(card, id);
+  const messages = {
+    unfamiliar: "收到，這張會更常安排給你練。",
+    learning: "標成半熟，過幾天會再回來複習。",
+    familiar: "已熟悉，短期內會少出現。",
+  };
+  showToast(messages[level] || "已更新熟悉程度");
+}
+
+function updateMemoryControls(scope, id) {
+  const current = ratingFor(id).level;
+  scope.querySelector(".learn-button")?.classList.toggle("learned", current === "familiar");
+  scope.querySelectorAll("[data-rating]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.rating === current);
+  });
 }
 
 async function handleInlineShadow(item, button, listenButton, status) {
@@ -553,10 +635,43 @@ function seededSelection(count, offset = 0) {
   return scored.sort((a, b) => a.score - b.score).slice(0, count).map((item) => item.word);
 }
 
+function recommendationNoise(word, index) {
+  const dateSeed = Number(localDateKey().replaceAll("-", "")) + state.dailyOffset;
+  const textSeed = [...word.id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return Math.sin((index + 1) * 917 + textSeed * 13 + dateSeed) * 8;
+}
+
+function recommendationScore(word, index) {
+  const rating = ratingFor(word.id);
+  const viewedDays = rating.updatedAt ? daysBetween(rating.updatedAt) : 99;
+  const dueDays = rating.nextReview ? daysBetween(rating.nextReview) : 0;
+  let score = 0;
+
+  if (rating.level === "unfamiliar") score += 100;
+  else if (rating.level === "learning") score += 75;
+  else if (rating.level === "new") score += 48;
+  else if (rating.level === "familiar") score += dueDays >= 0 ? 46 : -40;
+
+  if (!state.viewed.has(word.id)) score += 20;
+  if (dueDays >= 0) score += Math.min(24, dueDays * 4);
+  score += Math.min(18, viewedDays * 1.5);
+  score += recommendationNoise(word, index);
+  return score;
+}
+
+function recommendedDailyWords(count) {
+  const ranked = state.words
+    .map((word, index) => ({ word, score: recommendationScore(word, index) }))
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.word);
+
+  return ranked.slice(0, count);
+}
+
 function renderDaily() {
   const date = new Intl.DateTimeFormat("zh-TW", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
   $("#todayDate").textContent = date;
-  state.dailyWords = seededSelection(5, state.dailyOffset);
+  state.dailyWords = recommendedDailyWords(5);
   renderCards(state.dailyWords, $("#dailyGrid"));
 }
 

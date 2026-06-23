@@ -68,7 +68,7 @@
       </div>
       <div class="daily-intro">
         <span>5</span>
-        <p><strong>個情境，5 句英文</strong><br>不用全部記住，先聽懂、敢開口就好。</p>
+        <p><strong>今日推薦 5 張</strong><br>系統會優先安排不熟、半熟和該複習的情境。</p>
       </div>
       <div class="card-grid" id="dailyGrid"></div>
     </section>
@@ -101,6 +101,11 @@
         <div class="sentence">
           <p class="english-sentence"></p>
           <p class="translation"></p>
+          <div class="memory-actions" aria-label="熟悉程度">
+            <button type="button" data-rating="unfamiliar">不熟</button>
+            <button type="button" data-rating="learning">半熟</button>
+            <button type="button" data-rating="familiar">已熟</button>
+          </div>
           <div class="sentence-actions">
             <button class="sentence-audio"><span>▶</span>聽完整句子</button>
             <button class="shadow-button"><span>●</span>換你唸一次</button>
